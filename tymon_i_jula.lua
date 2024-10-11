@@ -22,6 +22,49 @@ local function dynamicRGB(element)
     end
 end
 
+-- Funkcja do przesuwania GUI
+local function makeDraggable(frame)
+    local dragging = false
+    local dragInput
+    local dragStart
+    local startPos
+
+    -- Funkcja uruchamiana po kliknięciu na ramkę
+    local function update(input)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+
+    -- Rozpoczynamy przeciąganie
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    -- Kontynuujemy przeciąganie
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    -- Aktualizujemy pozycję ramki podczas przeciągania
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            update(input)
+        end
+    end)
+end
+
 -- Tworzymy pole tekstowe (TextBox) do wpisywania tekstu
 local inputBox = Instance.new("TextBox")
 inputBox.Size = UDim2.new(0, 200, 0, 50) -- Rozmiar pola tekstowego
@@ -122,3 +165,7 @@ submitButton.MouseButton1Click:Connect(function()
         resultLabel.Text = "Niepoprawny kod" -- Jeśli tekst jest inny, wyświetlamy komunikat o błędzie
     end
 end)
+
+-- Dodajemy funkcjonalność przesuwania dla GUI
+makeDraggable(authFrame)
+makeDraggable(highlightFrame)
