@@ -65,11 +65,61 @@ local function makeDraggable(frame)
     end)
 end
 
+-- Funkcja do teleportacji gracza i latania wokół najbliższego gracza
+local orbitRunning = false -- Flaga do śledzenia stanu
+local function teleportAndOrbit()
+    if orbitRunning then
+        orbitRunning = false -- Wyłączamy krążenie
+        return
+    end
+    
+    orbitRunning = true -- Włączamy krążenie
+    
+    local player = game.Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local rootPart = character:WaitForChild("HumanoidRootPart")
+    
+    -- Znajdujemy najbliższego gracza
+    local closestPlayer = nil
+    local closestDistance = math.huge -- Ustawiamy początkowo jako bardzo dużą wartość
+    for _, otherPlayer in pairs(game.Players:GetPlayers()) do
+        if otherPlayer ~= player and otherPlayer.Character then
+            local otherRoot = otherPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if otherRoot then
+                local distance = (rootPart.Position - otherRoot.Position).Magnitude
+                if distance < closestDistance then
+                    closestDistance = distance
+                    closestPlayer = otherPlayer
+                end
+            end
+        end
+    end
+
+    if closestPlayer and closestPlayer.Character then
+        -- Teleportujemy się do najbliższego gracza
+        local targetRoot = closestPlayer.Character:WaitForChild("HumanoidRootPart")
+        rootPart.CFrame = targetRoot.CFrame * CFrame.new(5, 0, 0) -- Teleportacja obok gracza
+        
+        -- Latanie wokół gracza
+        local radius = 5 -- Promień latania wokół gracza
+        local angle = 0 -- Kąt startowy
+        while orbitRunning do
+            -- Obliczamy nową pozycję na podstawie kąta i promienia (tylko w poziomie X, Z)
+            local x = math.cos(angle) * radius
+            local z = math.sin(angle) * radius
+            rootPart.CFrame = targetRoot.CFrame * CFrame.new(x, 5, z) -- Zachowujemy stałą wysokość
+            
+            angle = angle + math.rad(5) -- Zwiększamy kąt, aby "obracać się"
+            wait(0.05) -- Odstęp między kolejnymi pozycjami
+        end
+    end
+end
+
 -- Tworzymy pole tekstowe (TextBox) do wpisywania tekstu
 local inputBox = Instance.new("TextBox")
 inputBox.Size = UDim2.new(0, 200, 0, 50) -- Rozmiar pola tekstowego
 inputBox.Position = UDim2.new(0.5, -100, 0.3, -25) -- Pozycja pola tekstowego (w środku ramki)
-inputBox.Text = "Wpisz tekst" -- Domyślny tekst
+inputBox.Text = "Wpisz KOD" -- Domyślny tekst
 inputBox.TextColor3 = Color3.new(1, 1, 1) -- Kolor tekstu (biały)
 inputBox.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2) -- Tło pola tekstowego (ciemnoszare)
 inputBox.Font = Enum.Font.GothamBold -- Ustawiamy czcionkę
@@ -80,7 +130,7 @@ local submitButton = Instance.new("TextButton")
 submitButton.Size = UDim2.new(0, 200, 0, 50) -- Rozmiar przycisku
 submitButton.Position = UDim2.new(0.5, -100, 0.7, -25) -- Pozycja przycisku (na dole ramki)
 submitButton.BackgroundColor3 = Color3.new(0, 0, 0.4) -- Kolor przycisku (ciemnoniebieski)
-submitButton.Text = "Sprawdź Tekst" -- Tekst na przycisku
+submitButton.Text = "Sprawdz Kod" -- Tekst na przycisku
 submitButton.TextColor3 = Color3.new(1, 1, 1) -- Kolor tekstu (biały)
 submitButton.Font = Enum.Font.GothamBold -- Czcionka GothamBold
 submitButton.Parent = authFrame -- Dodajemy przycisk do ramki
@@ -99,58 +149,6 @@ successLabel.Visible = false -- Na start ukryty
 successLabel.Parent = screenGui
 spawn(function() dynamicRGB(successLabel) end) -- Dynamiczny efekt RGB dla komunikatu
 
--- Tworzymy GUI dla highlightów (na razie niewidoczne)
-local highlightFrame = Instance.new("Frame")
-highlightFrame.Size = UDim2.new(0, 300, 0, 150)
-highlightFrame.Position = UDim2.new(0.5, -150, 0.5, -75)
-highlightFrame.BackgroundColor3 = Color3.new(0, 0, 0.1) -- Niebiesko-czarny kolor
-highlightFrame.Visible = false -- Na start ukryte
-highlightFrame.Parent = screenGui
-
-local highlightButton = Instance.new("TextButton")
-highlightButton.Size = UDim2.new(0, 200, 0, 50)
-highlightButton.Position = UDim2.new(0.5, -100, 0.5, -25)
-highlightButton.BackgroundColor3 = Color3.new(0, 0, 0.4) -- Ciemnoniebieski kolor
-highlightButton.Text = "Włącz Highlighty"
-highlightButton.TextColor3 = Color3.new(1, 1, 1)
-highlightButton.Font = Enum.Font.GothamBold -- Czcionka GothamBold
-highlightButton.Parent = highlightFrame
-spawn(function() dynamicRGB(highlightButton) end) -- Dynamiczny efekt RGB dla przycisku
-
--- Funkcja do tworzenia Highlight dla graczy
-local function toggleHighlights(enable)
-    for _, player in pairs(game.Players:GetPlayers()) do
-        if player.Character then
-            local character = player.Character
-            local highlight = character:FindFirstChild("PlayerHighlight")
-            if enable and not highlight then
-                -- Tworzymy highlight
-                local newHighlight = Instance.new("Highlight")
-                newHighlight.Name = "PlayerHighlight"
-                newHighlight.FillColor = Color3.new(1, 1, 0) -- Żółty kolor wypełnienia
-                newHighlight.OutlineColor = Color3.new(1, 0, 0) -- Czerwony kolor obrysu
-                newHighlight.Parent = character
-            elseif not enable and highlight then
-                -- Usuwamy highlight
-                highlight:Destroy()
-            end
-        end
-    end
-end
-
--- Przełącznik do włączania/wyłączania highlightów
-local highlightsEnabled = false
-highlightButton.MouseButton1Click:Connect(function()
-    highlightsEnabled = not highlightsEnabled -- Przełączanie stanu
-    if highlightsEnabled then
-        highlightButton.Text = "Wyłącz Highlighty"
-        toggleHighlights(true) -- Włączamy highlighty
-    else
-        highlightButton.Text = "Włącz Highlighty"
-        toggleHighlights(false) -- Wyłączamy highlighty
-    end
-end)
-
 -- Działanie po kliknięciu przycisku
 submitButton.MouseButton1Click:Connect(function()
     local enteredText = inputBox.Text -- Pobieramy tekst wpisany w TextBox
@@ -160,12 +158,66 @@ submitButton.MouseButton1Click:Connect(function()
         wait(2) -- Czekamy 2 sekundy
         successLabel.Visible = false -- Ukrywamy komunikat
         authFrame:Destroy() -- Usuwamy GUI autoryzacji
-        highlightFrame.Visible = true -- Pokazujemy GUI z highlightami
-    else
-        resultLabel.Text = "Niepoprawny kod" -- Jeśli tekst jest inny, wyświetlamy komunikat o błędzie
+        
+        -- Tworzymy nowe GUI z highlightami i przyciskiem do teleportacji
+        local highlightFrame = Instance.new("Frame")
+        highlightFrame.Size = UDim2.new(0, 300, 0, 150)
+        highlightFrame.Position = UDim2.new(0.5, -150, 0.5, -75)
+        highlightFrame.BackgroundColor3 = Color3.new(0, 0, 0.1)
+        highlightFrame.Parent = screenGui
+
+        -- Przycisk do pokazywania/wyłączania highlightów
+        local highlightButton = Instance.new("TextButton")
+        highlightButton.Size = UDim2.new(0, 200, 0, 50)
+        highlightButton.Position = UDim2.new(0.5, -100, 0.2, -25)
+        highlightButton.BackgroundColor3 = Color3.new(0, 0, 0.4)
+        highlightButton.Text = "Włącz espa i nie pierdol"
+        highlightButton.TextColor3 = Color3.new(1, 1, 1)
+        highlightButton.Font = Enum.Font.GothamBold
+        highlightButton.Parent = highlightFrame
+        spawn(function() dynamicRGB(highlightButton) end)
+
+        local highlightEnabled = false -- Flaga do śledzenia stanu highlightów
+
+        highlightButton.MouseButton1Click:Connect(function()
+            highlightEnabled = not highlightEnabled -- Przełączamy stan highlightów
+            for _, player in pairs(game.Players:GetPlayers()) do
+                if player.Character then
+                    local highlight = player.Character:FindFirstChild("Highlight")
+                    if highlightEnabled then
+                        if not highlight then
+                            highlight = Instance.new("Highlight")
+                            highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                            highlight.OutlineTransparency = 0
+                            highlight.Parent = player.Character
+                        end
+                    else
+                        if highlight then
+                            highlight:Destroy()
+                        end
+                    end
+                end
+            end
+        end)
+
+        -- Przycisk do teleportacji i krążenia
+        local orbitButton = Instance.new("TextButton")
+        orbitButton.Size = UDim2.new(0, 200, 0, 50)
+        orbitButton.Position = UDim2.new(0.5, -100, 0.6, -25)
+        orbitButton.BackgroundColor3 = Color3.new(0, 0, 0.4)
+        orbitButton.Text = "Nie krąż"
+        orbitButton.TextColor3 = Color3.new(1, 1, 1)
+        orbitButton.Font = Enum.Font.GothamBold
+        orbitButton.Parent = highlightFrame
+        spawn(function() dynamicRGB(orbitButton) end)
+
+        orbitButton.MouseButton1Click:Connect(function()
+            teleportAndOrbit()
+        end)
+        
+        makeDraggable(highlightFrame) -- Możliwość przeciągania nowego okna
     end
 end)
 
 -- Dodajemy funkcjonalność przesuwania dla GUI
 makeDraggable(authFrame)
-makeDraggable(highlightFrame)
