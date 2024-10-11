@@ -21,6 +21,7 @@ local Script = {
     Options = {
         "Nie krąż",            -- Opcja nie krążenia
         "ESP",                 -- Opcja ESP
+        "FLY (don't work)"                  -- Opcja latania
     },
     Functions = {}
 }
@@ -46,12 +47,59 @@ local MainWindow = Library:CreateWindow({
 })
 
 local Tabs = {
-    Options = MainWindow:AddTab("Main"),
+    Main = MainWindow:AddTab("Main"), -- Tworzymy zakładkę "Main"
 }
 
 --// Funkcje \\--
 function Script.Functions.Alert(message)
     Library:Notify(message, 5)
+end
+
+-- Funkcje do latania
+local flying = false
+local control = {F = 0, B = 0, L = 0, R = 0, U = 0, D = 0}
+local speed = 50
+local function fly()
+    if flying then return end
+    flying = true
+
+    local player = Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local rootPart = character:WaitForChild("HumanoidRootPart")
+
+    local bodyGyro = Instance.new("BodyGyro")
+    local bodyVelocity = Instance.new("BodyVelocity")
+
+    bodyGyro.P = 9e4
+    bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    bodyGyro.Parent = rootPart
+
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    bodyVelocity.Parent = rootPart
+
+    while flying do
+        bodyGyro.CFrame = workspace.CurrentCamera.CFrame
+        bodyVelocity.Velocity = (workspace.CurrentCamera.CFrame.LookVector * control.F +
+                                 workspace.CurrentCamera.CFrame.RightVector * control.R +
+                                 Vector3.new(0, control.U - control.D, 0)) * speed
+        RunService.RenderStepped:Wait()
+    end
+
+    bodyGyro:Destroy()
+    bodyVelocity:Destroy()
+end
+
+local function stopFlying()
+    flying = false
+end
+
+local function toggleFly()
+    if flying then
+        stopFlying()
+    else
+        fly()
+    end
 end
 
 -- Funkcja do teleportacji gracza i latania wokół najbliższego gracza
@@ -107,45 +155,53 @@ end
 -- Funkcja do ESP
 local espEnabled = false -- Flaga do śledzenia stanu ESP
 local espObjects = {} -- Przechowuje referencje do ESP
+local espUpdateInterval = 1 -- Czas w sekundach pomiędzy aktualizacjami ESP
 
-local function toggleESP()
-    espEnabled = not espEnabled -- Zmiana stanu ESP
-
-    for _, otherPlayer in pairs(Players:GetPlayers()) do
-        if otherPlayer ~= Players.LocalPlayer then
-            if otherPlayer.Character then
-                if espEnabled then
-                    local highlight = Instance.new("Highlight") -- Tworzenie highlightu
-                    highlight.Adornee = otherPlayer.Character
-                    highlight.FillColor = Color3.new(1, 0, 0) -- Czerwony kolor highlightu
-                    highlight.FillTransparency = 0.5 -- Przezroczystość
-                    highlight.OutlineColor = Color3.new(0, 0, 0) -- Czarny kontur
-                    highlight.OutlineTransparency = 0 -- Brak przezroczystości konturu
-                    highlight.Parent = otherPlayer.Character
-
-                    -- Dodanie highlightu do listy
-                    espObjects[otherPlayer.UserId] = highlight
-                else
-                    -- Usunięcie highlightu, jeśli jest wyłączony
-                    local existingHighlight = espObjects[otherPlayer.UserId]
-                    if existingHighlight then
-                        existingHighlight:Destroy()
-                        espObjects[otherPlayer.UserId] = nil -- Usuwamy referencję
+local function updateESP()
+    while espEnabled do
+        for _, otherPlayer in pairs(Players:GetPlayers()) do
+            if otherPlayer ~= Players.LocalPlayer then
+                if otherPlayer.Character then
+                    local highlight = espObjects[otherPlayer.UserId]
+                    if not highlight then
+                        -- Tworzenie highlightu
+                        highlight = Instance.new("Highlight") -- Tworzenie highlightu
+                        highlight.Adornee = otherPlayer.Character
+                        highlight.FillColor = Color3.new(1, 0, 0) -- Czerwony kolor highlightu
+                        highlight.FillTransparency = 0.5 -- Przezroczystość
+                        highlight.OutlineColor = Color3.new(0, 0, 0) -- Czarny kontur
+                        highlight.OutlineTransparency = 0 -- Brak przezroczystości konturu
+                        highlight.Parent = otherPlayer.Character
+                        espObjects[otherPlayer.UserId] = highlight -- Dodanie highlightu do listy
                     end
                 end
             end
         end
+        wait(espUpdateInterval) -- Czekamy na kolejną aktualizację
     end
+
+    -- Usunięcie wszystkich highlightów po wyłączeniu ESP
+    for userId, highlight in pairs(espObjects) do
+        if highlight then
+            highlight:Destroy()
+        end
+    end
+    espObjects = {} -- Resetowanie listy obiektów ESP
+end
+
+local function toggleESP()
+    espEnabled = not espEnabled -- Zmiana stanu ESP
 
     if espEnabled then
         Script.Functions.Alert("ESP enabled!")
+        spawn(updateESP) -- Uruchamiamy aktualizację ESP w osobnym wątku
     else
         Script.Functions.Alert("ESP disabled!")
     end
 end
 
 -- Sekcja Opisów
-local OptionsGroup = Tabs.Options:AddLeftGroupbox("Options")
+local OptionsGroup = Tabs.Main:AddLeftGroupbox("Options")
 OptionsGroup:AddLabel("Available Options:")
 OptionsGroup:AddButton("Nie krąż", function()
     nieKraz()
@@ -155,26 +211,19 @@ OptionsGroup:AddButton("ESP", function()
     toggleESP() -- Przełączanie ESP
 end)
 
+OptionsGroup:AddButton("FLY", function()
+    toggleFly() -- Przełączanie latania
+end)
+
 for _, option in ipairs(Script.Options) do
-    -- Pomijamy "Nie krąż" i "ESP", ponieważ już zostały dodane
-    if option ~= "Nie krąż" and option ~= "ESP" then
+    -- Pomijamy "Nie krąż", "ESP" i "FLY", ponieważ już zostały dodane
+    if option ~= "Nie krąż" and option ~= "ESP" and option ~= "FLY" then
         OptionsGroup:AddButton(option, function()
             Script.Functions.Alert(option .. " selected!")
             -- Tutaj dodaj funkcjonalność dla wybranej opcji
         end)
     end
 end
-
--- Sekcja Ustawień
-local SettingsGroup = Tabs.Main:AddRightGroupbox("Settings")
-SettingsGroup:AddToggle("Enable Feature", {
-    Text = "Enable Feature",
-    Default = true
-})
-
-SettingsGroup:AddButton("Test Button", function()
-    Script.Functions.Alert("Test Button Clicked!")
-end)
 
 -- Możliwość przeciągania GUI
 local dragging = false
@@ -185,6 +234,7 @@ local startPos
 window.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = true
+        dragInput = input
         dragStart = input.Position
         startPos = window.Position
 
@@ -197,18 +247,10 @@ window.InputBegan:Connect(function(input)
 end)
 
 window.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then
-        if dragging then
-            local delta = input.Position - dragStart
-            window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
 
--- Unloading the library
-Library:OnUnload(function()
-    print("Unloaded!")
-    Library.Unloaded = true
-end)
-
-getgenv().mspaint_loaded = true
+-- Koniec skryptu
